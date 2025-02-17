@@ -26,15 +26,13 @@ jobs:
       - name: Get changed files
         id: get_changed_files
         run: |
-          CHANGED_FILES=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-          | jq -r '.[] | select((.filename | contains("BundleVersions")) and (.status == "added" or .status == "modified") and (.filename | test("dev.json$|live.json$") | not)) | .filename')
+          curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+          | jq -r '.[] | select((.filename | contains("BundleVersions")) and (.status == "added" or .status == "modified") and (.filename | test("dev.json$|live.json$") | not)) | .filename' > changed_files_list.txt
 
           echo "Filtered changed files:"
-          echo "$CHANGED_FILES"
-
-          echo "$CHANGED_FILES" | tr '\n' ' ' > changed_files_list.txt
+          cat changed_files_list.txt
 
       - name: Post PR comment
         run: |
@@ -43,21 +41,19 @@ jobs:
             exit 0
           fi
 
-          echo "Files to comment on:"
-          cat changed_files_list.txt
-
           while IFS= read -r FILE_PATH; do
             [ -z "$FILE_PATH" ] && continue  # Skip empty lines
 
             COMMENT_BODY="Automated PR Review: Please delete this file."
+            POSITION=1  # Set a default line position for commenting
 
             echo "Posting comment to: $FILE_PATH"
 
             curl -s -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            -d "{\"body\": \"$COMMENT_BODY\", \"path\": \"$FILE_PATH\", \"commit_id\": \"$LATEST_COMMIT_SHA\", \"subject_type\": \"file\"}" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments"
-          
+                 -H "Accept: application/vnd.github+json" \
+                 -d "{\"body\": \"$COMMENT_BODY\", \"path\": \"$FILE_PATH\", \"commit_id\": \"$LATEST_COMMIT_SHA\", \"position\": $POSITION}" \
+                 "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments"
+
           done < changed_files_list.txt
 
       - name: Cleanup temporary file
