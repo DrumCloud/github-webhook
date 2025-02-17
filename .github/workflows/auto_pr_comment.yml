@@ -51,7 +51,7 @@ jobs:
 
             curl -s -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
                  -H "Accept: application/vnd.github+json" \
-                 -d "{\"body\": \"$COMMENT_BODY\", \"path\": \"$FILE_PATH\", \"commit_id\": \"$LATEST_COMMIT_SHA\", \"position\": $POSITION}" \
+                 -d "{\"body\": \"$COMMENT_BODY\", \"path\": \"$FILE_PATH\", \"commit_id\": \"$LATEST_COMMIT_SHA\", \"subject_type\": \"file\", \"position\": $POSITION}" \
                  "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments"
 
           done < changed_files_list.txt
