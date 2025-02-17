@@ -31,20 +31,25 @@ jobs:
           "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
           | jq -r '.[] | select((.filename | contains("BundleVersions")) and (.status == "added" or .status == "modified") and (.filename | test("dev.json$|live.json$") | not)) | .filename')
 
-          echo "Filtered changed files: $CHANGED_FILES"
-          echo "CHANGED_FILES<<EOF" >> $GITHUB_ENV
-          echo "$CHANGED_FILES" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          echo "Filtered changed files:"
+          echo "$CHANGED_FILES"
+
+          echo "$CHANGED_FILES" | tr '\n' ' ' > changed_files_list.txt
 
       - name: Post PR comment
         run: |
-          if [ -z "$CHANGED_FILES" ]; then
+          if [ ! -s changed_files_list.txt ]; then
             echo "No eligible files to comment on. Skipping."
             exit 0
           fi
 
-          for FILE_PATH in $CHANGED_FILES; do
-            COMMENT_BODY="Automated PR Review: The file \`$FILE_PATH\` has been modified or added in a path containing 'BundleVersions'. (Latest Commit: $LATEST_COMMIT_SHA)"
+          echo "Files to comment on:"
+          cat changed_files_list.txt
+
+          while IFS= read -r FILE_PATH; do
+            [ -z "$FILE_PATH" ] && continue  # Skip empty lines
+
+            COMMENT_BODY="Automated PR Review: Please delete this file."
 
             echo "Posting comment to: $FILE_PATH"
 
@@ -52,4 +57,8 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             -d "{\"body\": \"$COMMENT_BODY\", \"commit_id\": \"$LATEST_COMMIT_SHA\", \"path\": \"$FILE_PATH\", \"position\": 1}" \
             "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments"
-          done
+          done < changed_files_list.txt
+
+      - name: Cleanup temporary file
+        if: always()
+        run: rm -f changed_files_list.txt
