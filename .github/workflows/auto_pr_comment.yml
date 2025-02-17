@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  pull-requests: write  # Grant permission to write comments
+  pull-requests: write  # Required to add comments to PRs
 
 jobs:
   comment-on-pr:
@@ -18,10 +18,10 @@ jobs:
           LATEST_COMMIT_SHA=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
           -H "Accept: application/vnd.github.v3+json" \
           "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits" \
-          | jq -r '.[0].sha')
+          | jq -r '.[-1].sha')
 
-          echo "Latest commit SHA: $LATEST_COMMIT_SHA"
           echo "LATEST_COMMIT_SHA=$LATEST_COMMIT_SHA" >> $GITHUB_ENV
+          echo "Latest commit SHA: $LATEST_COMMIT_SHA"
 
       - name: Get changed files
         id: get_changed_files
@@ -29,21 +29,27 @@ jobs:
           CHANGED_FILES=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
           -H "Accept: application/vnd.github.v3+json" \
           "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-          | jq -r '.[].filename')
+          | jq -r '.[] | select((.filename | contains("BundleVersions")) and (.status == "added" or .status == "modified") and (.filename | test("dev.json$|live.json$") | not)) | .filename')
 
-          echo "Changed files: $CHANGED_FILES"
+          echo "Filtered changed files: $CHANGED_FILES"
           echo "CHANGED_FILES<<EOF" >> $GITHUB_ENV
           echo "$CHANGED_FILES" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
       - name: Post PR comment
         run: |
-          FILE_PATH=$(echo "$CHANGED_FILES" | head -n 1)  # Change to target a specific file
-          COMMENT_BODY="Automated PR Review: Looks good! (Latest Commit: $LATEST_COMMIT_SHA)"
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No eligible files to comment on. Skipping."
+            exit 0
+          fi
 
-          echo "Posting comment to file: $FILE_PATH"
+          for FILE_PATH in $CHANGED_FILES; do
+            COMMENT_BODY="Automated PR Review: The file \`$FILE_PATH\` has been modified or added in a path containing 'BundleVersions'. (Latest Commit: $LATEST_COMMIT_SHA)"
 
-          curl -s -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github+json" \
-          -d "{\"body\": \"$COMMENT_BODY\", \"path\": \"$FILE_PATH\", \"commit_id\": \"$LATEST_COMMIT_SHA\", \"subject_type\": \"file\"}" \
-          "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments"
+            echo "Posting comment to: $FILE_PATH"
+
+            curl -s -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "{\"body\": \"$COMMENT_BODY\", \"commit_id\": \"$LATEST_COMMIT_SHA\", \"path\": \"$FILE_PATH\", \"position\": 1}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments"
+          done
