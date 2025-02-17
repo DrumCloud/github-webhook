@@ -54,9 +54,10 @@ jobs:
             echo "Posting comment to: $FILE_PATH"
 
             curl -s -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -d "{\"body\": \"$COMMENT_BODY\", \"commit_id\": \"$LATEST_COMMIT_SHA\", \"path\": \"$FILE_PATH\", \"position\": 1}" \
+            -H "Accept: application/vnd.github+json" \
+            -d "{\"body\": \"$COMMENT_BODY\", \"path\": \"$FILE_PATH\", \"commit_id\": \"$LATEST_COMMIT_SHA\", \"subject_type\": \"file\"}" \
             "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments"
+          
           done < changed_files_list.txt
 
       - name: Cleanup temporary file
